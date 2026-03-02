@@ -28,9 +28,17 @@ export const HeroForm = () => {
   const { toast } = useToast();
 
   const onSubmit = async ({ name }: FormSchema) => {
-    const { message } = await helloAction(name);
+    const result = await helloAction(name);
 
-    toast({ description: message });
+    if (result.success) {
+      toast({ description: result.data.message });
+    } else {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: result.error.message,
+      });
+    }
   };
 
   return (

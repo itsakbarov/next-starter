@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 
 import { env } from '@/env.mjs';
-import prisma from '@/lib/prisma';
 import { stripeServer } from '@/lib/stripe';
+import { handleStripeEvent } from './stripeEventHandlers';
+import { getEventType } from './stripeEventTypes';
 
 const webhookHandler = async (req: NextRequest) => {
   try {
@@ -19,42 +20,35 @@ const webhookHandler = async (req: NextRequest) => {
         env.STRIPE_WEBHOOK_SECRET_KEY
       );
     } catch (err) {
+      console.error('Error constructing Stripe event:', err);
       return NextResponse.json(
         {
           error: {
-            message: `Webhook Error - ${err}`,
+            message: `Webhook Error: ${err instanceof Error ? err.message : 'Unknown error'}`,
           },
         },
         { status: 400 }
       );
     }
 
-    const subscription = event.data.object as Stripe.Subscription;
+    const eventType = getEventType(event);
+    console.log(`Received ${eventType} event: ${event.type}`);
 
-    switch (event.type) {
-      case 'customer.subscription.created':
-        await prisma.user.update({
-          where: {
-            stripeCustomerId: subscription.customer as string,
-          },
-          data: {
-            isActive: true,
-          },
-        });
-        break;
-      default:
-        break;
-    }
+    await handleStripeEvent(event);
+
+    console.log(`Successfully processed ${eventType} event: ${event.type}`);
     return NextResponse.json({ received: true });
-  } catch {
+  } catch (error) {
+    console.error('Webhook error:', error);
     return NextResponse.json(
       {
         error: {
-          message: 'Method Not Allowed',
+          message: 'Internal Server Error',
+          details: error instanceof Error ? error.message : 'Unknown error',
         },
       },
-      { status: 405 }
-    ).headers.set('Allow', 'POST');
+      { status: 500 }
+    );
   }
 };
 
